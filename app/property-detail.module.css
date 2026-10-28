@@ -1,0 +1,339 @@
+.backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  justify-content: flex-end;
+  background: rgb(22 34 28 / 48%);
+  backdrop-filter: blur(2px);
+}
+
+.dialog {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, 100%);
+  height: 100%;
+  background: #fbfcfa;
+  box-shadow: -15px 0 45px rgb(23 35 29 / 13%);
+  animation: drawerIn 220ms ease-out;
+  color: #1f2926;
+  font-family: Arial, "Leelawadee UI", Tahoma, sans-serif;
+}
+
+.header {
+  display: flex;
+  justify-content: space-between;
+  gap: 15px;
+  padding: 25px 26px 18px;
+  border-bottom: 1px solid #e7eae5;
+  background: #fff;
+}
+.header > div:first-child { min-width: 0; }
+.headerActions { display: flex; flex: 0 0 auto; align-items: center; gap: 8px; }
+
+.eyebrow {
+  color: #1e725d;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 1.3px;
+}
+.header h2 {
+  margin: 6px 0 4px;
+  font-size: 19px;
+  line-height: 1.35;
+}
+.header p {
+  margin: 0;
+  color: #7b8580;
+  font-size: 11px;
+}
+
+.close {
+  width: 34px;
+  height: 34px;
+  flex: 0 0 34px;
+  border: 1px solid #e7eae5;
+  border-radius: 10px;
+  background: #fff;
+  color: #647068;
+  font-size: 23px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.scroll {
+  overflow: auto;
+  padding: 18px 22px 32px;
+}
+.metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.metrics > div {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e7eae5;
+  border-radius: 11px;
+  background: #fff;
+}
+.metrics small {
+  display: block;
+  margin-bottom: 5px;
+  color: #7b8580;
+  font-size: 9px;
+}
+.metrics strong {
+  display: block;
+  color: #1e725d;
+  font-size: 15px;
+  white-space: nowrap;
+}
+.saveButton { display:grid; place-items:center; width:44px; height:44px; margin:12px 0 0 auto; padding:0 0 2px; border:1px solid #e4d4d4; border-radius:50%; background:#fff8f7; color:#b45454; font-size:27px; line-height:1; cursor:pointer; }
+.saveButton[aria-pressed="true"] { border-color:#f0c8c8; background:#fff0f0; }
+
+.section {
+  margin-top: 15px;
+  padding: 17px;
+  border: 1px solid #e7eae5;
+  border-radius: 13px;
+  background: #fff;
+}
+.sectionTitle h3 {
+  margin: 0;
+  font-size: 13px;
+}
+.sectionTitle p {
+  margin: 4px 0 14px;
+  color: #7b8580;
+  font-size: 10px;
+}
+.control {
+  display: block;
+  padding: 10px 0;
+  border-top: 1px solid #f0f1ee;
+}
+.control > span {
+  display: block;
+  margin-bottom: 8px;
+  color: #6c7770;
+  font-size: 10px;
+}
+.control > div {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.control input[type="range"] {
+  flex: 1;
+  accent-color: #1e725d;
+}
+.control b {
+  min-width: 55px;
+  font-size: 11px;
+  text-align: right;
+}
+.costInput {
+  padding: 7px 9px;
+  border: 1px solid #e7eae5;
+  border-radius: 8px;
+  color: #7b8580;
+}
+.costInput input {
+  width: 100%;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: #1f2926;
+  text-align: right;
+}
+.result {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  padding: 12px;
+  border-radius: 10px;
+  background: #edf5ef;
+}
+.result > span {
+  font-size: 11px;
+  font-weight: 700;
+}
+.result small {
+  display: block;
+  margin-top: 3px;
+  color: #758078;
+  font-size: 9px;
+  font-weight: 400;
+}
+.result strong {
+  color: #1e725d;
+  font-size: 21px;
+  white-space: nowrap;
+}
+.footnote {
+  margin: 10px 0 0;
+  color: #929b95;
+  font-size: 9px;
+  line-height: 1.6;
+}
+
+.facts {
+  display: grid;
+}
+.facts > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-top: 1px solid #f0f1ee;
+  font-size: 10px;
+}
+.facts span {
+  color: #7e8981;
+}
+.facts b {
+  font-weight: 600;
+  text-align: right;
+}
+.factLow {
+  color: #588063;
+}
+.factHigh {
+  color: #b94b43;
+}
+.factMedium {
+  color: #bd8457;
+}
+.sourceNote {
+  margin-top: 11px;
+  padding: 10px;
+  border-radius: 8px;
+  background: #f5f7f3;
+  color: #7d8880;
+  font-size: 9px;
+  line-height: 1.5;
+}
+.sourceLink {
+  color: #1e725d;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.deleteImportButton {
+  margin: 0;
+  padding: 8px 11px;
+  border: 1px solid #efd8d2;
+  border-radius: 8px;
+  background: #fff8f6;
+  color: #a75e50;
+  font-size: 10px;
+  font-weight: 700;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.deleteImportButton:hover { background: #fff0ec; }
+
+.similarList {
+  display: grid;
+  gap: 8px;
+}
+.similarCard {
+  padding: 11px 12px;
+  border: 1px solid #edf0eb;
+  border-radius: 10px;
+  background: #fcfdfb;
+}
+.similarMain,
+.similarFoot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.similarName {
+  min-width: 0;
+}
+.similarName strong {
+  display: block;
+  overflow: hidden;
+  color: #1f2926;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.similarName small,
+.similarPrice small {
+  display: block;
+  margin-top: 3px;
+  color: #859089;
+  font-size: 9px;
+  font-weight: 400;
+}
+.similarName small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.similarPrice {
+  flex: 0 0 auto;
+  color: #1e725d;
+  font-size: 11px;
+  font-weight: 700;
+  text-align: right;
+  white-space: nowrap;
+}
+.similarFoot {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid #f0f1ee;
+}
+.similarDelta {
+  color: #758078;
+  font-size: 9px;
+}
+.similarFoot button {
+  border: 0;
+  background: transparent;
+  color: #1e725d;
+  font-size: 9px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.similarEmpty {
+  margin: 0;
+  padding: 12px;
+  border-radius: 8px;
+  background: #f5f7f3;
+  color: #7b8580;
+  font-size: 10px;
+  text-align: center;
+}
+
+@keyframes drawerIn {
+  from {
+    transform: translateX(24px);
+    opacity: 0.7;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (max-width: 600px) {
+  .header {
+    padding: 19px 17px 15px;
+  }
+  .scroll {
+    padding: 14px 12px 24px;
+  }
+  .section {
+    padding: 14px;
+  }
+  .metrics strong {
+    font-size: 12px;
+  }
+}
