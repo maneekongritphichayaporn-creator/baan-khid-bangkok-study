@@ -3,6 +3,8 @@
 // Interactive dashboard and property detail experience.
 import { useEffect, useMemo, useRef, useState, type ChangeEvent } from "react";
 import { createPortal } from "react-dom";
+import "leaflet/dist/leaflet.css";
+import type * as Leaflet from "leaflet";
 import detailStyles from "./property-detail.module.css";
 import compareStyles from "./property-compare.module.css";
 import investmentStyles from "./investment-lab.module.css";
@@ -22,14 +24,13 @@ type Property = {
   sourceUrl?: string;
   observedAt?: string;
   isImported?: boolean;
-  isRemote?: boolean;
 };
 type ImportErrorRow = { rowNumber: number; reason: string; values: string[] };
 
 const properties: Property[] = [
   {
-    name: "The Tree Sukhumvit 71",
-    location: "พระโขนง · ใกล้ BTS พระโขนง",
+    name: "ชุดตัวอย่างสมมติ 01",
+    location: "พระโขนง",
     type: "คอนโด",
     price: 3.85,
     rent: 16500,
@@ -38,8 +39,8 @@ const properties: Property[] = [
     icon: "🏢",
   },
   {
-    name: "Ideo Mobi Sukhumvit Eastpoint",
-    location: "บางนา · ใกล้ BTS บางนา",
+    name: "ชุดตัวอย่างสมมติ 02",
+    location: "บางนา",
     type: "คอนโด",
     price: 4.2,
     rent: 18000,
@@ -48,8 +49,8 @@ const properties: Property[] = [
     icon: "🏙️",
   },
   {
-    name: "Life Asoke - Rama 9",
-    location: "ห้วยขวาง · ใกล้ MRT พระราม 9",
+    name: "ชุดตัวอย่างสมมติ 03",
+    location: "ห้วยขวาง",
     type: "คอนโด",
     price: 5.1,
     rent: 22000,
@@ -58,8 +59,8 @@ const properties: Property[] = [
     icon: "🏢",
   },
   {
-    name: "Regent Home Sukhumvit 81",
-    location: "อ่อนนุช · ใกล้ BTS อ่อนนุช",
+    name: "ชุดตัวอย่างสมมติ 04",
+    location: "วัฒนา",
     type: "คอนโด",
     price: 2.75,
     rent: 12500,
@@ -68,8 +69,8 @@ const properties: Property[] = [
     icon: "🏬",
   },
   {
-    name: "หอพัก The Corner",
-    location: "ห้วยขวาง · ใกล้ MRT ห้วยขวาง",
+    name: "ชุดตัวอย่างสมมติ 05",
+    location: "ดุสิต",
     type: "หอพัก",
     price: 1.85,
     rent: 9500,
@@ -78,8 +79,8 @@ const properties: Property[] = [
     icon: "🏠",
   },
   {
-    name: "Supalai Veranda Rama 9",
-    location: "ห้วยขวาง · ใกล้ MRT พระราม 9",
+    name: "ชุดตัวอย่างสมมติ 06",
+    location: "จตุจักร",
     type: "คอนโด",
     price: 3.6,
     rent: 17000,
@@ -290,64 +291,189 @@ const comparisonRows: {
   {
     label: "ความเสี่ยงน้ำท่วม",
     value: (property) =>
-      `${property.risk} · ${property.isImported ? "นำเข้าจากไฟล์" : property.isRemote ? "ฐานข้อมูล" : "ข้อมูลตัวอย่าง"}`,
+      `${property.risk} · ${property.isImported ? "นำเข้าจากไฟล์" : "ข้อมูลสมมติ"}`,
   },
 ];
 
 function BangkokMap({
   onSelectProperty,
-  importedProperties,
-  showSamplePins,
+  mapProperties,
 }: {
   onSelectProperty: (property: Property) => void;
-  importedProperties: Property[];
-  showSamplePins: boolean;
+  mapProperties: Property[];
 }) {
   const [showPrices, setShowPrices] = useState(true);
   const [showFloodRisk, setShowFloodRisk] = useState(false);
   const [mapType, setMapType] = useState("all");
   const [mapRisk, setMapRisk] = useState("all");
-  const samplePins = showSamplePins
-    ? [
-        { property: properties[4], left: 23, top: 60 },
-        { property: properties[2], left: 28, top: 48 },
-        { property: properties[5], left: 34, top: 43 },
-        { property: properties[0], left: 49, top: 50 },
-        { property: properties[3], left: 69, top: 40 },
-        { property: properties[1], left: 77, top: 38 },
-      ]
-    : [];
-  const mappedImports = importedProperties.flatMap((property) => {
-    if (property.latitude === undefined || property.longitude === undefined)
-      return [];
-    const left = ((property.longitude - 100.35) / 0.5) * 100;
-    const top = ((13.95 - property.latitude) / 0.4) * 100;
-    return left >= 2 && left <= 98 && top >= 2 && top <= 98
-      ? [{ property, left, top }]
-      : [];
-  });
-  const mappedImportNames = new Set(
-    mappedImports.map((pin) => pin.property.name),
+  const mapContainerRef = useRef<HTMLDivElement>(null);
+  const mapRef = useRef<Leaflet.Map | null>(null);
+  const markerLayerRef = useRef<Leaflet.LayerGroup | null>(null);
+  const leafletRef = useRef<typeof Leaflet | null>(null);
+  const onSelectPropertyRef = useRef(onSelectProperty);
+  const [mapReady, setMapReady] = useState(false);
+  const [mapStatus, setMapStatus] = useState<
+    "loading" | "ready" | "tile-error" | "error"
+  >("loading");
+  useEffect(() => {
+    onSelectPropertyRef.current = onSelectProperty;
+  }, [onSelectProperty]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void import("leaflet")
+      .then((L) => {
+        if (cancelled || !mapContainerRef.current) return;
+
+        const map = L.map(mapContainerRef.current, {
+          center: [13.7563, 100.5018],
+          zoom: 11,
+          scrollWheelZoom: true,
+          zoomControl: false,
+        });
+        const tiles = L.tileLayer(
+          "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+          {
+            maxZoom: 19,
+            attribution: "&copy; OpenStreetMap contributors",
+          },
+        );
+        tiles.on("tileerror", () => setMapStatus("tile-error"));
+        tiles.on("tileload", () =>
+          setMapStatus((status) =>
+            status === "tile-error" ? "ready" : status,
+          ),
+        );
+        tiles.addTo(map);
+        mapRef.current = map;
+        markerLayerRef.current = L.layerGroup().addTo(map);
+        leafletRef.current = L;
+        setMapReady(true);
+        setMapStatus("ready");
+      })
+      .catch((error: unknown) => {
+        if (cancelled) return;
+        console.error("Failed to load the property map", error);
+        setMapStatus("error");
+      });
+
+    return () => {
+      cancelled = true;
+      mapRef.current?.remove();
+      mapRef.current = null;
+      markerLayerRef.current = null;
+      leafletRef.current = null;
+    };
+  }, []);
+
+  const mappedImports = useMemo(
+    () =>
+      mapProperties.flatMap((property) => {
+        const latitude = property.latitude;
+        const longitude = property.longitude;
+        if (
+          typeof latitude !== "number" ||
+          typeof longitude !== "number" ||
+          !Number.isFinite(latitude) ||
+          !Number.isFinite(longitude) ||
+          latitude < -90 ||
+          latitude > 90 ||
+          longitude < -180 ||
+          longitude > 180
+        )
+          return [];
+        return [
+          {
+            property,
+            position: [latitude, longitude] as Leaflet.LatLngTuple,
+          },
+        ];
+      }),
+    [mapProperties],
   );
-  const pins = [
-    ...samplePins.filter((pin) => !mappedImportNames.has(pin.property.name)),
-    ...mappedImports,
-  ];
-  const visiblePins = pins.filter(
-    ({ property }) =>
-      (mapType === "all" || property.type === mapType) &&
-      (mapRisk === "all" ||
-        (mapRisk === "low" && property.risk === "ต่ำ") ||
-        (mapRisk === "watch" && property.risk === "เฝ้าระวัง") ||
-        (mapRisk === "high" && property.risk === "สูง") ||
-        (mapRisk === "unknown" && property.risk === "ไม่ระบุ")),
+  const visiblePins = useMemo(
+    () =>
+      mappedImports.filter(
+        ({ property }) =>
+          (mapType === "all" || property.type === mapType) &&
+          (mapRisk === "all" ||
+            (mapRisk === "low" && property.risk === "ต่ำ") ||
+            (mapRisk === "watch" && property.risk === "เฝ้าระวัง") ||
+            (mapRisk === "high" && property.risk === "สูง") ||
+            (mapRisk === "unknown" && property.risk === "ไม่ระบุ")),
+      ),
+    [mappedImports, mapType, mapRisk],
   );
-  const riskPins = visiblePins.filter(
-    ({ property }) => property.risk !== "ไม่ระบุ",
-  );
+  useEffect(() => {
+    const map = mapRef.current;
+    const markerLayer = markerLayerRef.current;
+    const L = leafletRef.current;
+    if (!map || !markerLayer || !L) return;
+
+    markerLayer.clearLayers();
+    visiblePins.forEach(({ property, position }) => {
+      const marker = L.circleMarker(position, {
+          radius: 8,
+          color: "#fff",
+          weight: 2,
+          fillColor: showFloodRisk
+            ? property.risk === "ต่ำ"
+              ? "#538968"
+              : property.risk === "เฝ้าระวัง"
+                ? "#dc835c"
+                : property.risk === "สูง"
+                  ? "#c94b43"
+                  : "#818b84"
+            : "#1e725d",
+          fillOpacity: 0.95,
+        },
+      );
+      if (showPrices) {
+        const priceLabel = document.createElement("span");
+        priceLabel.textContent = `฿ ${property.price.toFixed(2)} ล.`;
+        marker.bindTooltip(priceLabel, {
+          direction: "top",
+          offset: [0, -8],
+          opacity: 0.95,
+        });
+      }
+      marker.on("click", () => onSelectPropertyRef.current(property));
+      marker.addTo(markerLayer);
+    });
+
+    if (visiblePins.length) {
+      const bounds = L.latLngBounds(
+        visiblePins.map(({ position }) => position),
+      );
+      map.fitBounds(bounds, { padding: [32, 32], maxZoom: 14 });
+    } else {
+      map.setView([13.7563, 100.5018], 11);
+    }
+    map.invalidateSize();
+  }, [mapReady, visiblePins, showPrices, showFloodRisk]);
   return (
     <div className="map-canvas">
+      <div
+        ref={mapContainerRef}
+        className="leaflet-map"
+        role="img"
+        aria-label="แผนที่จริงพร้อมตำแหน่งทรัพย์สินตามพิกัด"
+      />
       <div className="map-controls">
+        <button
+          aria-label="ซูมเข้าแผนที่"
+          title="ซูมเข้า"
+          onClick={() => mapRef.current?.zoomIn()}
+        >
+          +
+        </button>
+        <button
+          aria-label="ซูมออกจากแผนที่"
+          title="ซูมออก"
+          onClick={() => mapRef.current?.zoomOut()}
+        >
+          −
+        </button>
         <button
           className={showPrices ? "selected" : ""}
           aria-pressed={showPrices}
@@ -360,7 +486,7 @@ function BangkokMap({
           aria-pressed={showFloodRisk}
           onClick={() => setShowFloodRisk((value) => !value)}
         >
-          ชั้นความเสี่ยง
+          สีหมุดตามความเสี่ยง
         </button>
         <select
           aria-label="กรองประเภททรัพย์สินบนแผนที่"
@@ -383,117 +509,27 @@ function BangkokMap({
           <option value="unknown">ไม่มีข้อมูลเสี่ยง</option>
         </select>
       </div>
-      <svg
-        viewBox="0 0 820 265"
-        preserveAspectRatio="xMidYMid slice"
-        role="img"
-        aria-label="แผนที่จำลองพื้นที่กรุงเทพฯ"
-      >
-        <rect width="820" height="265" fill="#edf0e8" />
-        <path
-          d="M-20 198 C120 180 160 229 265 196 S440 190 516 216 680 171 850 196"
-          fill="none"
-          stroke="#d5e4de"
-          strokeWidth="34"
-        />
-        <path
-          d="M-15 198 C120 180 160 229 265 196 S440 190 516 216 680 171 850 196"
-          fill="none"
-          stroke="#c2d9d1"
-          strokeWidth="1.5"
-        />
-        <g fill="none" stroke="#fff" strokeWidth="7">
-          <path d="M-10 55L830 150M10 232L700 15M245-20L380 300M590-20L510 300M-10 130L830 80M130-15L190 290M0 80L780 235M310-10L270 275M710-10L640 290" />
-        </g>
-        <g fill="none" stroke="#d4d9d1">
-          <path d="M-10 55L830 150M10 232L700 15M245-20L380 300M590-20L510 300M-10 130L830 80M130-15L190 290M0 80L780 235M310-10L270 275M710-10L640 290" />
-        </g>
-        <path
-          d="M99 177 C205 160 275 167 371 139 S559 108 736 78"
-          fill="none"
-          stroke="#399477"
-          strokeWidth="3"
-          strokeDasharray="7 5"
-        />
-        <g fontSize="11" fill="#758078">
-          <text x="80" y="44">
-            ห้วยขวาง
-          </text>
-          <text x="309" y="71">
-            พระโขนง
-          </text>
-          <text x="541" y="123">
-            อ่อนนุช
-          </text>
-          <text x="669" y="45">
-            บางนา
-          </text>
-          <text x="217" y="236">
-            คลองเตย
-          </text>
-        </g>
-        <g>
-          <circle
-            cx="329"
-            cy="139"
-            r="7"
-            fill="#2878c7"
-            stroke="white"
-            strokeWidth="3"
-          />
-          <circle
-            cx="424"
-            cy="126"
-            r="7"
-            fill="#2878c7"
-            stroke="white"
-            strokeWidth="3"
-          />
-          <circle
-            cx="568"
-            cy="106"
-            r="8"
-            fill="#2878c7"
-            stroke="white"
-            strokeWidth="3"
-          />
-          <circle
-            cx="615"
-            cy="100"
-            r="6"
-            fill="#2878c7"
-            stroke="white"
-            strokeWidth="3"
-          />
-        </g>
-      </svg>
-      {showFloodRisk &&
-        riskPins.map((pin) => (
-          <div
-            key={`risk-${pin.property.name}`}
-            className={`map-risk-area ${pin.property.risk === "ต่ำ" ? "low" : pin.property.risk === "สูง" ? "high" : "watch"}`}
-            style={{ left: `${pin.left}%`, top: `${pin.top}%` }}
-            title={`${pin.property.name} · ${pin.property.risk}`}
-          />
-        ))}
-      {visiblePins.map((pin) => (
-        <button
-          key={pin.property.name}
-          className={`map-property-pin ${showPrices ? "with-price" : ""} ${showFloodRisk ? `risk-${pin.property.risk === "ต่ำ" ? "low" : pin.property.risk === "เฝ้าระวัง" ? "watch" : pin.property.risk === "สูง" ? "high" : "unknown"}` : ""}`}
-          style={{ left: `${pin.left}%`, top: `${pin.top}%` }}
-          title={`${pin.property.name} · ฿ ${pin.property.price.toFixed(2)} ล้านบาท · ${pin.property.risk}${pin.property.isImported ? " · หมุดจากพิกัด CSV" : pin.property.isRemote ? " · หมุดจากฐานข้อมูล" : " · ตัวอย่าง"}`}
-          aria-label={`เปิดรายละเอียด ${pin.property.name}`}
-          onClick={() => onSelectProperty(pin.property)}
-        >
-          <i />
-          {showPrices && <span>฿ {pin.property.price.toFixed(2)} ล.</span>}
-        </button>
-      ))}
+      {mapStatus === "loading" && (
+        <div className="map-status">กำลังโหลดแผนที่…</div>
+      )}
+      {mapStatus === "error" && (
+        <div className="map-status" role="alert">
+          โหลดแผนที่ไม่สำเร็จ โปรดลองรีเฟรชหน้า
+        </div>
+      )}
+      {mapStatus === "tile-error" && (
+        <div className="map-status" role="status">
+          โหลดแผนที่บางส่วนไม่ได้ · ตรวจสอบการเชื่อมต่ออินเทอร์เน็ต
+        </div>
+      )}
+      {mapStatus === "ready" && visiblePins.length === 0 && (
+        <div className="map-status">
+          {mappedImports.length === 0
+            ? `ยังไม่มีทรัพย์ที่ระบุพิกัดครบ (${mapProperties.length} รายการไม่มีพิกัด)`
+            : "ไม่มีทรัพย์ที่ตรงกับตัวกรองแผนที่"}
+        </div>
+      )}
       <div className="map-legend">
-        <span>
-          <i className="station-dot" />
-          สถานีรถไฟฟ้า
-        </span>
         {showFloodRisk && (
           <>
             <span>
@@ -508,17 +544,22 @@ function BangkokMap({
               <i className="red-dot" />
               ความเสี่ยงสูง
             </span>
+            <span>
+              <i className="unknown-dot" />
+              ไม่ระบุ
+            </span>
           </>
         )}
       </div>
       <div className="map-disclaimer">
-        แผนที่จำลอง · หมุด CSV {mappedImports.length} รายการ (ตำแหน่งโดยประมาณ)
+        OpenStreetMap · แสดงหมุด {visiblePins.length} รายการจากพิกัดจริง
       </div>
     </div>
   );
 }
 
 export default function Home() {
+  const [districtFilter, setDistrictFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [type, setType] = useState("all");
   const [budget, setBudget] = useState("all");
@@ -533,10 +574,6 @@ export default function Home() {
   const [notice, setNotice] = useState("");
   const [favorites, setFavorites] = useState<string[]>([]);
   const [favoritesReady, setFavoritesReady] = useState(false);
-  const [remoteProperties, setRemoteProperties] = useState<Property[]>([]);
-  const [remoteDataStatus, setRemoteDataStatus] = useState<
-    "loading" | "demo" | "connected" | "empty" | "error"
-  >("loading");
   const [importedProperties, setImportedProperties] = useState<Property[]>([]);
   const [importErrors, setImportErrors] = useState<{
     headers: string[];
@@ -569,58 +606,43 @@ export default function Home() {
         ? "property"
         : null;
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const loadPublishedProperties = async () => {
-      try {
-        const response = await fetch("/api/properties", {
-          signal: controller.signal,
-        });
-        if (!response.ok) throw new Error("Supabase request failed");
-        const result = (await response.json()) as {
-          configured?: boolean;
-          properties?: Property[];
-        };
-        if (!result.configured) {
-          setRemoteDataStatus("demo");
-          return;
-        }
-        const published = Array.isArray(result.properties)
-          ? result.properties.filter(
-              (property) =>
-                typeof property.name === "string" &&
-                typeof property.price === "number" &&
-                typeof property.size === "number",
-            )
-          : [];
-        setRemoteProperties(published);
-        setRemoteDataStatus(published.length ? "connected" : "empty");
-      } catch {
-        if (!controller.signal.aborted) setRemoteDataStatus("error");
-      }
-    };
-    void loadPublishedProperties();
-    return () => controller.abort();
-  }, []);
-
   const availableProperties = useMemo(() => {
-    const baseProperties = remoteProperties.length
-      ? remoteProperties
-      : properties;
     const importedNames = new Set(
       importedProperties.map((property) => property.name),
     );
     return [
-      ...baseProperties.filter((property) => !importedNames.has(property.name)),
+      ...properties.filter((property) => !importedNames.has(property.name)),
       ...importedProperties,
     ];
-  }, [importedProperties, remoteProperties]);
+  }, [importedProperties]);
+
+  const districtOptions = useMemo(
+    () =>
+      [
+        ...new Set(
+          availableProperties
+            .map((property) => property.location.split("·")[0].trim())
+            .filter(Boolean),
+        ),
+      ].sort((a, b) => a.localeCompare(b, "th")),
+    [availableProperties],
+  );
+  const districtProperties = useMemo(
+    () =>
+      districtFilter === "all"
+        ? availableProperties
+        : availableProperties.filter(
+            (property) =>
+              property.location.split("·")[0].trim() === districtFilter,
+          ),
+    [availableProperties, districtFilter],
+  );
 
   const dashboardStats = useMemo(() => {
-    const withRent = availableProperties.filter(
+    const withRent = districtProperties.filter(
       (property) => property.rent > 0,
     );
-    const totalAskingPrice = availableProperties.reduce(
+    const totalAskingPrice = districtProperties.reduce(
       (sum, property) => sum + property.price,
       0,
     );
@@ -633,9 +655,9 @@ export default function Home() {
       0,
     );
     return {
-      total: availableProperties.length,
-      averageAskingPrice: availableProperties.length
-        ? totalAskingPrice / availableProperties.length
+      total: districtProperties.length,
+      averageAskingPrice: districtProperties.length
+        ? totalAskingPrice / districtProperties.length
         : 0,
       averageRent: withRent.length ? totalRent / withRent.length : 0,
       grossYield: totalRentablePrice
@@ -643,7 +665,7 @@ export default function Home() {
         : 0,
       rentCount: withRent.length,
     };
-  }, [availableProperties]);
+  }, [districtProperties]);
 
   const importedCoverage = useMemo(() => {
     const total = importedProperties.length;
@@ -661,7 +683,7 @@ export default function Home() {
 
   const yieldByDistrict = useMemo(() => {
     const districts = new Map<string, Property[]>();
-    availableProperties.forEach((property) => {
+    districtProperties.forEach((property) => {
       const district = property.location.split("·")[0].trim() || "ไม่ระบุย่าน";
       districts.set(district, [...(districts.get(district) ?? []), property]);
     });
@@ -689,11 +711,11 @@ export default function Home() {
       })
       .sort((a, b) => (b.grossYield ?? -1) - (a.grossYield ?? -1))
       .slice(0, 3);
-  }, [availableProperties]);
+  }, [districtProperties]);
 
   const priceByDistrict = useMemo(() => {
     const districts = new Map<string, Property[]>();
-    availableProperties.forEach((property) => {
+    districtProperties.forEach((property) => {
       const district = property.location.split("·")[0].trim() || "ไม่ระบุย่าน";
       districts.set(district, [...(districts.get(district) ?? []), property]);
     });
@@ -717,7 +739,7 @@ export default function Home() {
         ? (area.averagePricePerSqm / maxPricePerSqm) * 100
         : 0,
     }));
-  }, [availableProperties]);
+  }, [districtProperties]);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -742,7 +764,14 @@ export default function Home() {
   useEffect(() => {
     const timeout = window.setTimeout(() => {
       try {
-        const stored = window.localStorage.getItem("baanคิด:imported-properties");
+        const cleanupKey = "baanคิด:sample-only-cleanup:v1";
+        if (window.localStorage.getItem(cleanupKey) !== "done") {
+          window.localStorage.removeItem("baanคิด:imported-properties");
+          window.localStorage.setItem(cleanupKey, "done");
+        }
+        const stored = window.localStorage.getItem(
+          "baanคิด:imported-properties",
+        );
         if (stored) {
           const parsed: unknown = JSON.parse(stored);
           if (Array.isArray(parsed))
@@ -769,6 +798,7 @@ export default function Home() {
         }
       } catch {
         setImportedProperties([]);
+        setNotice("ไม่สามารถโหลดหรือล้างข้อมูล CSV ในเบราว์เซอร์ได้");
       } finally {
         setImportsReady(true);
       }
@@ -884,7 +914,7 @@ export default function Home() {
   }, [activeDialog, selectedProperty?.name]);
 
   const filtered = useMemo(() => {
-    const matches = availableProperties.filter((property) => {
+    const matches = districtProperties.filter((property) => {
       const matchesQuery = `${property.name} ${property.location}`
         .toLowerCase()
         .includes(query.trim().toLowerCase());
@@ -924,7 +954,7 @@ export default function Home() {
     sortBy,
     active,
     favorites,
-    availableProperties,
+    districtProperties,
   ]);
 
   const listingPageKey = filtered
@@ -942,6 +972,7 @@ export default function Home() {
     setListingPagination({ key: listingPageKey, page });
 
   const resetExplorerFilters = () => {
+    setDistrictFilter("all");
     setQuery("");
     setType("all");
     setBudget("all");
@@ -1296,20 +1327,16 @@ export default function Home() {
           <div className="nav-label">YOUR PILOT</div>
           <div className="pilot-card">
             <b>พื้นที่นำร่อง · กรุงเทพฯ</b>
-            <p>ข้อมูลตัวอย่างครอบคลุม 3 ย่าน: อ่อนนุช · พระโขนง · ห้วยขวาง</p>
+            <p>ข้อมูลปัจจุบันครอบคลุม {districtOptions.length} เขต/ย่าน</p>
             <button
               onClick={() =>
-                showNotice("ขอบเขตตัวอย่าง: อ่อนนุช · พระโขนง · ห้วยขวาง")
+                showNotice(
+                  `เลือกพื้นที่จากตัวเลือกมุมขวาบน · ${districtOptions.length} เขต/ย่าน`,
+                )
               }
             >
               ดูขอบเขตข้อมูล ↗
             </button>
-          </div>
-          <div className="profile">
-            <div className="avatar">ค</div>
-            <div>
-              คุณผู้ใช้งาน<small>บัญชีทดลอง</small>
-            </div>
           </div>
         </div>
       </aside>
@@ -1319,7 +1346,21 @@ export default function Home() {
             Bangkok <span>/</span> <strong>{active}</strong>
           </div>
           <div className="top-actions">
-            <button className="city-picker">⌖ &nbsp;กรุงเทพมหานคร　⌄</button>
+            <label className="city-picker">
+              <span aria-hidden="true">⌖</span>
+              <select
+                aria-label="เลือกเขตหรือย่านในกรุงเทพมหานคร"
+                value={districtFilter}
+                onChange={(event) => setDistrictFilter(event.target.value)}
+              >
+                <option value="all">ทุกเขต · กรุงเทพฯ</option>
+                {districtOptions.map((district) => (
+                  <option key={district} value={district}>
+                    {district}
+                  </option>
+                ))}
+              </select>
+            </label>
             <button className="bell" aria-label="การแจ้งเตือน">
               ♧
             </button>
@@ -1328,27 +1369,18 @@ export default function Home() {
         <div className="content-area">
           <section className="page-heading">
             <div>
-              <div className="eyebrow">MONDAY, 26 OCTOBER 2026</div>
               <h1>มองตลาดอสังหาฯ ให้ขาด</h1>
               <p>
-                ข้อมูลทำเล ราคา และโอกาสลงทุน — รวมไว้ให้ตัดสินใจได้ในที่เดียว
+                ต้นแบบเพื่อการศึกษา · ข้อมูลและตัวเลขทั้งหมดเป็นข้อมูลสมมติ ไม่ใช่ข้อมูลตลาดจริง
               </p>
             </div>
             <div className="heading-actions">
               <div className="updated">
                 <i />
-                {remoteDataStatus === "loading"
-                  ? "กำลังตรวจข้อมูล Supabase"
-                  : remoteDataStatus === "connected"
-                    ? `Supabase · ${remoteProperties.length} รายการเผยแพร่`
-                    : remoteDataStatus === "empty"
-                      ? "ยังไม่มีข้อมูลเผยแพร่ · แสดงตัวอย่าง"
-                      : remoteDataStatus === "error"
-                        ? "เชื่อมต่อ Supabase ไม่ได้ · แสดงตัวอย่าง"
-                        : "ข้อมูลตัวอย่างวันนี้"}
+                ชุดข้อมูลสมมติเพื่อการศึกษา
               </div>
               <label className="csv-import-button">
-                นำเข้า CSV
+                พรีวิว CSV บนเครื่องนี้
                 <input
                   type="file"
                   accept=".csv,text/csv"
@@ -1367,7 +1399,7 @@ export default function Home() {
                 href="/property-import-sample.csv"
                 download
               >
-                ไฟล์ตัวอย่าง 1 แถว
+                ไฟล์ตัวอย่างหลายเขต
               </a>
               {importedProperties.length > 0 && (
                 <button
@@ -1390,7 +1422,7 @@ export default function Home() {
                   className="csv-clear-button"
                   onClick={clearImportedProperties}
                 >
-                  ล้างข้อมูลนำเข้า
+                  ล้างข้อมูลบนเครื่อง
                 </button>
               )}
             </div>
@@ -1595,10 +1627,7 @@ export default function Home() {
               </div>
               <div className="stat-value">{money(dashboardStats.total)}</div>
               <div className="stat-foot">
-                CSV {importedProperties.length} ·{" "}
-                {remoteProperties.length
-                  ? `Supabase ${remoteProperties.length}`
-                  : `ตัวอย่าง ${dashboardStats.total - importedProperties.length}`}
+                ตัวอย่าง {dashboardStats.total - importedProperties.length} · CSV ในเครื่องนี้ {importedProperties.length}
               </div>
             </article>
           </section>
@@ -1606,26 +1635,23 @@ export default function Home() {
             <section className="panel map-panel">
               <div className="panel-heading">
                 <div>
-                  <h2>สำรวจทำเลกรุงเทพฯ</h2>
-                  <p>ราคาเสนอขายและสถานีรถไฟฟ้า</p>
+                  <h2>แผนที่กรุงเทพฯ</h2>
+                  <p>ตำแหน่งทรัพย์สินจากละติจูดและลองจิจูด</p>
                 </div>
                 <button
                   className="text-link"
                   onClick={() =>
-                    showNotice("แผนที่นี้เป็นภาพจำลองเพื่อสาธิตแนวคิด")
+                    showNotice(
+                      "ซูมด้วยล้อเมาส์หรือปุ่ม +/- และคลิกหมุดเพื่อดูรายละเอียดทรัพย์",
+                    )
                   }
                 >
-                  เปิดแผนที่เต็ม　↗
+                  วิธีใช้แผนที่
                 </button>
               </div>
               <BangkokMap
                 onSelectProperty={openPropertyDetail}
-                importedProperties={availableProperties.filter(
-                  (property) =>
-                    property.latitude !== undefined &&
-                    property.longitude !== undefined,
-                )}
-                showSamplePins={remoteProperties.length === 0}
+                mapProperties={districtProperties}
               />
             </section>
             <section className="panel market-panel">
@@ -1874,7 +1900,7 @@ export default function Home() {
           <footer className="footer">
             <span>บ้านคิด · Bangkok Property Intelligence</span>
             <span>
-              ต้นแบบผลิตภัณฑ์ · แหล่งข้อมูลระบุตามรายการ · ผลวิเคราะห์เป็นการคำนวณประกอบ
+              ต้นแบบเพื่อการศึกษา · ข้อมูลสมมติ ไม่ใช่ราคาประกาศหรือคำแนะนำการลงทุน
             </span>
           </footer>
         </div>
@@ -2066,9 +2092,7 @@ export default function Home() {
                       {selectedProperty.risk} ·{" "}
                       {selectedProperty.isImported
                         ? "นำเข้า"
-                        : selectedProperty.isRemote
-                          ? "ฐานข้อมูล"
-                          : "ตัวอย่าง"}
+                        : "ตัวอย่างสมมติ"}
                     </b>
                   </div>
                   <div>
@@ -2090,7 +2114,7 @@ export default function Home() {
                     )}
                 </div>
                 <div className={detailStyles.sourceNote}>
-                  {selectedProperty.isImported || selectedProperty.isRemote ? (
+                  {selectedProperty.isImported ? (
                     <>
                       แหล่งข้อมูล:{" "}
                       {selectedProperty.source ||
@@ -2116,7 +2140,7 @@ export default function Home() {
                         : " · ไม่ระบุวันที่สังเกต"}{" "}
                       {selectedProperty.isImported
                         ? "ไฟล์ถูกเก็บไว้ในเบราว์เซอร์นี้"
-                        : "เผยแพร่จากฐานข้อมูล Supabase"}
+                        : "ข้อมูลสมมติเพื่อการศึกษา"}
                     </>
                   ) : (
                     "ข้อมูลทรัพย์สินและความเสี่ยงในต้นแบบเป็นข้อมูลจำลอง ยังไม่ได้เชื่อมแหล่งประกาศหรือข้อมูลหน่วยงาน"

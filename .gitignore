@@ -34,6 +34,16 @@ yarn-error.log*
 .env*
 !.env.example
 
+# Local-only data and public listing samples must not be committed.
+/data/private/
+/property-import-web-sample.csv
+
+# Supabase CLI local project state
+/supabase/.temp/
+
+# Temporary package cache used by npx in restricted environments
+/.npm-cache/
+
 # vercel
 .vercel
 

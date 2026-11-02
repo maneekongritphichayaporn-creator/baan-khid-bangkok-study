@@ -1,44 +1,30 @@
 # Data model and CSV import pipeline
 
-The initial PostgreSQL/PostGIS schema is in `supabase/migrations/20261027000000_initial_property_intelligence.sql`.
-It keeps property facts, observed listings, valuations, and forecasts in separate tables so a new asking price never overwrites an older observation or a valuation.
+The schema migrations in `supabase/migrations/` separate property facts from observed sale/rent listings, valuations, and forecasts. A new asking price is an observation and must not overwrite an older observation or a valuation.
 
 ## CSV field mapping
 
-Use `/property-import-template.csv` for a blank header-only file or `/property-import-sample.csv` to try importing one clearly fictional property row. The sample values are for interface testing and are not a real listing.
+Use `/property-import-template.csv` for a blank header-only file or `/property-import-sample.csv` to preview 50 clearly fictional test rows across all 50 Bangkok districts. Prices, rents, areas, and locations are invented for testing; they are not facts about properties or market conditions. Coordinates and source URLs are intentionally blank. The sample is openly distributed by this project for educational and testing use and must not be treated as real listing data or used for financial decisions. Real listing data previously kept locally has been removed from the project dataset.
 
 | CSV column | Database field | Import rule |
 | --- | --- | --- |
-| `name` | `properties.title` | Trim whitespace; keep the original display name. |
+| `name` | `properties.title` | Required; trimmed and limited to 255 characters. |
 | `district` | `properties.district` | Required. |
 | `type` | `properties.property_type` | Normalize `คอนโด` to `condo` and `หอพัก` to `dormitory`. |
-| `price_thb` | `property_listings.price_thb` | Create a `sale` listing in baht; do not store millions. |
-| `monthly_rent_thb` or `rent_thb` | `property_listings.price_thb` | Create a separate `rent` listing in baht when supplied. |
+| `price_thb` | `property_listings.price_thb` | Required sale observation in baht, not millions. |
+| `monthly_rent_thb` or `rent_thb` | `property_listings.price_thb` | Optional monthly rent observation in baht. |
 | `area_sqm` | `properties.usable_area_sqm` | Required; positive square metres. |
-| `transit` | `properties.transit_description` | Preserve the supplied text. A measured distance belongs in `property_features.distance_to_transit_m`. |
-| `flood_risk` | `property_features.flood_risk_level` | Normalize `low` to ต่ำ, `moderate` to เฝ้าระวัง, `high` to สูง, and blank or unknown values to ไม่ระบุ; retain the source in `data_sources`. |
-| `latitude`, `longitude` | `properties.latitude`, `properties.longitude`, `properties.location` | Optional pair in decimal degrees (WGS84). Supply both or leave both blank. The current schematic map plots points only inside its Bangkok bounds. |
-| `source` | `data_sources.name` | Reuse a matching source record. |
-| `source_url` | `property_listings.source_url` | Optional `http` or `https` reference; invalid URLs are ignored by the browser importer. |
-| `observed_at` | `property_listings.observed_at` | Date attached to each imported listing. |
+| `transit` | `properties.transit_description` | Preserve supplied text. Measured distance belongs in `property_features.distance_to_transit_m`. |
+| `flood_risk` | `property_features.flood_risk_level` | Normalize `low`, `moderate`, and `high`; blank or unknown values become `unknown`. |
+| `latitude`, `longitude` | `properties.latitude`, `properties.longitude`, `properties.location` | Optional decimal WGS84 pair. Supply both or leave both blank. |
+| `source` | `data_sources.name` | Reuse a matching source record; defaults to `นำเข้าจาก CSV`. |
+| `source_url` | `property_listings.source_url` | Optional HTTP or HTTPS URL. |
+| `observed_at` | `property_listings.observed_at` | Optional `YYYY-MM-DD` or `DD/MM/YYYY` Gregorian date. |
 
-When browser CSV imports are later connected to a server-side import job, each file should create an `import_batches` row, then insert or match `properties`, followed by one sale listing and, when present, one rent listing per row. Preserve source URLs and batch IDs on listing rows. Record rejected rows in the batch counts and error summary; do not silently discard them. The current importer is browser-local and does not write to these tables.
+The local admin script validates the complete CSV before writing, accepts 1–500 rows, and calls the atomic `import_property_batch` database function. Exact duplicate observations are skipped. Imported listings use `unknown` status and new properties remain unpublished. The script never publishes data.
 
-## Apply the migration
+The dashboard's CSV preview is separate and stays in that browser only; it is not sent to Supabase. Previously saved CSV imports are cleared when the new sample-only app version loads. Favorites are browser-local.
 
-This migration targets PostgreSQL with the PostGIS extension enabled (for example, a Supabase project). Review the migration in the SQL editor before applying it to a hosted database. The app can read published property records through its server route after Supabase credentials are configured; CSV imports still stay in the current browser. Do not put a database password or Supabase service role key in client code or commit it to the repository.
+The dashboard map uses Leaflet with OpenStreetMap tiles and plots only valid coordinate pairs. OpenStreetMap attribution is displayed; its standard tile service is not an unlimited production host. Choose a dedicated tile provider before scaling traffic. Property-level flood-risk labels are not a flood-zone boundary layer.
 
-The initial migration enables row-level security on every table. The published-read migration adds anonymous/authenticated read-only access to explicitly published properties and their active listings, features, and sources. It does not grant public writes or access to import batch records. Keep real data in the database only when its source and reuse rights are documented.
-
-## Supabase setup checklist
-
-The app's Supabase read path is server-side and uses the project's publishable/anon key under row-level security. Create `.env.local` from `.env.example` and set `SUPABASE_URL` and `SUPABASE_ANON_KEY`; do not commit `.env.local`.
-
-1. Create a Supabase project and confirm the PostGIS extension is available.
-2. Review and run `supabase/migrations/20261027000000_initial_property_intelligence.sql`, then `supabase/migrations/20261028000000_public_published_property_reads.sql` in the project's SQL editor.
-3. The second migration adds `properties.is_published` (default false) and public read policies for published properties, active listings, their features, and sources. It grants no public writes or access to import batch records. Publish only records whose source and reuse rights have been checked.
-4. Copy `.env.example` to `.env.local`, add the project URL and publishable/anon key, then restart the development server. The dashboard will use published condo and dormitory records when available, and show the sample dataset when Supabase is unconfigured or has no published rows.
-
-To publish a reviewed record from the SQL editor, set `is_published = true` for its `properties.id` only after checking the listing source and its reuse rights. The default is false, so newly inserted records remain hidden from the app until reviewed.
-
-CSV imports and favorites remain browser-local. Before syncing user uploads or adding accounts, add ownership fields and user-scoped policies. Keep `service_role` credentials server-only and never expose them through `NEXT_PUBLIC_*` variables. Do not disable row-level security to make the initial connection appear to work.
+The public app is in sample-only mode and does not read Supabase. For future authorized real-data imports only, see [admin-supabase.md](./admin-supabase.md). Keep source evidence and reuse-rights decisions for every real dataset. Do not treat public accessibility as permission to republish listing descriptions, photographs, or personal data.

@@ -1,36 +1,49 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# บ้านคิด — Bangkok Property Intelligence
 
-## Getting Started
+เว็บต้นแบบเพื่อการศึกษาเรื่องการสำรวจและเปรียบเทียบอสังหาริมทรัพย์ในกรุงเทพฯ สร้างด้วย Next.js
 
-First, run the development server:
+- หน้าเว็บใช้ข้อมูลสมมติเท่านั้น และไม่อ่านข้อมูลจาก Supabase
+- ผู้ใช้สามารถนำเข้า CSV เพื่อพรีวิวในเบราว์เซอร์ของตัวเองได้ ข้อมูลจะไม่ถูกส่งไปยังเซิร์ฟเวอร์
+- CSV ตัวอย่างที่เผยแพร่มี 50 แถว ครบ 50 เขตของกรุงเทพฯ ตัวเลขทั้งหมดสร้างขึ้นเพื่อทดสอบ ไม่ใช่ข้อมูลทรัพย์สินจริง
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## โครงสร้างโปรเจกต์
+
+```text
+app/                  เว็บตัวอย่างเพื่อการศึกษา
+scripts/              เครื่องมือ Admin ที่รันจากเครื่องส่วนตัว
+supabase/migrations/  schema, RLS และฟังก์ชันนำเข้าข้อมูล
+docs/                 คู่มือ Admin/Supabase และกติกาข้อมูล
+public/               ไฟล์ static ที่ผู้ใช้เข้าถึงได้ เช่น CSV template
+data/private/         ไฟล์ข้อมูล local ที่ยังไม่ตรวจสิทธิ์ (ไม่ commit เข้า Git)
+README.md             วิธีพัฒนา ทดสอบ และ deploy
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## เริ่มต้นใช้งาน
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+ต้องใช้ Node.js รุ่นที่รองรับ Next.js 16 (Node.js 20.9 ขึ้นไป)
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```powershell
+npm ci
+Copy-Item .env.example .env.local
+npm run dev
+```
 
-## Learn More
+ไม่ต้องตั้งค่า Supabase เพื่อเปิดเว็บตัวอย่าง โครงการยังเก็บสคริปต์และ migration สำหรับศึกษา workflow การจัดการข้อมูล แต่ไม่ได้เชื่อมต่อกับหน้าเว็บในโหมดตัวอย่างนี้
 
-To learn more about Next.js, take a look at the following resources:
+## ตรวจสอบก่อน deploy
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```powershell
+npm run lint
+npm run test:import
+npx.cmd tsc --noEmit
+npm run build
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+เว็บตัวอย่างไม่ต้องใช้ environment variables สำหรับ Supabase และไม่โหลดข้อมูลจริงจากฐานข้อมูล
 
-## Deploy on Vercel
+## คู่มือดูแลข้อมูล
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+- [ตั้งค่า Supabase, นำเข้า CSV และเผยแพร่ข้อมูล](./docs/admin-supabase.md)
+- [โครงสร้างข้อมูลและกติกา CSV](./docs/data-pipeline.md)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+ไฟล์ `public/property-import-sample.csv` มี 50 แถวข้อมูลสมมติซึ่งเผยแพร่เพื่อสาธิตและทดสอบ UI ได้ ข้อมูลราคา พื้นที่ ค่าเช่า และทำเลเป็นข้อมูลที่สร้างขึ้น ไม่ใช่ข้อเท็จจริงหรือข้อมูลตลาด และไม่มีพิกัด ห้ามใช้ประกอบการซื้อขายหรือการลงทุน ส่วนไฟล์ประกาศจากเว็บจริงที่ยังไม่ผ่านการตรวจสิทธิ์ได้ถูกนำออกจากชุดข้อมูลของโปรเจกต์แล้ว
